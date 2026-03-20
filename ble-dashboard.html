@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLE Indoor Positioning</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<style>
+:root{--bg:#080b0f;--surface:#0f1318;--border:#1c2230;--accent:#00ff88;--accent-dim:#00ff8822;--accent2:#00aaff;--warn:#ffaa00;--danger:#ff4466;--text:#bcc8de;--text-dim:#3d4f68;--mono:'Share Tech Mono',monospace;--sans:'Barlow',sans-serif;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+header{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-bottom:1px solid var(--border);background:var(--surface);flex-shrink:0;gap:12px;}
+.logo{display:flex;align-items:center;gap:10px;}
+.logo svg{width:26px;height:26px;}
+.logo-text{font-family:var(--mono);font-size:13px;letter-spacing:.12em;color:var(--accent);}
+.logo-sub{font-size:9px;color:var(--text-dim);letter-spacing:.1em;text-transform:uppercase;margin-top:1px;}
+.hpills{display:flex;gap:10px;align-items:center;margin-left:auto;}
+.pill{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--text-dim);background:var(--bg);border:1px solid var(--border);padding:4px 10px;border-radius:20px;}
+.pill .dot{width:6px;height:6px;border-radius:50%;background:var(--text-dim);flex-shrink:0;}
+.pill.live{color:var(--accent);border-color:var(--accent-dim);}
+.pill.live .dot{background:var(--accent);box-shadow:0 0 5px var(--accent);animation:blink 1.4s infinite;}
+.pill.fb-on{color:var(--warn);border-color:#ffaa0030;}
+.pill.fb-on .dot{background:var(--warn);box-shadow:0 0 5px var(--warn);animation:blink 1.4s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.main{display:grid;grid-template-columns:1fr 272px;flex:1;min-height:0;}
+.floor-wrap{display:flex;align-items:center;justify-content:center;padding:20px;position:relative;overflow:hidden;}
+.floor-wrap::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 39px,var(--border) 39px,var(--border) 40px),repeating-linear-gradient(90deg,transparent,transparent 39px,var(--border) 39px,var(--border) 40px);opacity:.18;}
+.canvas-wrap{position:relative;z-index:1;}
+#floor{display:block;cursor:crosshair;}
+.hint{font-family:var(--mono);font-size:9px;color:var(--text-dim);text-align:center;margin-top:6px;letter-spacing:.07em;}
+.sidebar{border-left:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;overflow-y:auto;}
+.sidebar::-webkit-scrollbar{width:4px;}
+.sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+.sec{border-bottom:1px solid var(--border);padding:13px 15px;}
+.sec-title{font-family:var(--mono);font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--text-dim);margin-bottom:10px;}
+.pos-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:9px;}
+.pos-card{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:9px 11px;}
+.pos-card .ax{font-family:var(--mono);font-size:9px;color:var(--text-dim);margin-bottom:2px;}
+.pos-card .val{font-family:var(--mono);font-size:21px;color:var(--accent);line-height:1;}
+.pos-card .val span{font-size:10px;color:var(--text-dim);}
+.irow{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-dim);padding:3px 0;}
+.ival{font-family:var(--mono);font-size:11px;color:var(--accent2);}
+.bc{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:9px 11px;margin-bottom:7px;transition:border-color .2s;}
+.bc.on{border-color:#1a3528;}
+.bct{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
+.bdot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.bname{font-family:var(--mono);font-size:11px;color:var(--text);flex:1;}
+.brssi{font-family:var(--mono);font-size:12px;text-align:right;}
+.bdist{font-size:9px;color:var(--text-dim);font-family:var(--mono);text-align:right;margin-top:1px;}
+.bbar-bg{height:2px;background:var(--border);border-radius:1px;overflow:hidden;}
+.bbar{height:100%;border-radius:1px;transition:width .35s ease;}
+.fb-form{display:flex;flex-direction:column;gap:7px;}
+.fbi{background:var(--bg);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:10px;padding:7px 9px;border-radius:3px;width:100%;outline:none;transition:border-color .2s;}
+.fbi:focus{border-color:var(--accent2);}
+.fbi::placeholder{color:var(--text-dim);}
+.fbi-label{font-size:10px;color:var(--text-dim);margin-bottom:2px;}
+.srow{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:7px;}
+.srow input[type=range]{width:90px;accent-color:var(--accent);}
+.sval{font-family:var(--mono);font-size:11px;color:var(--text);min-width:32px;text-align:right;}
+.trow{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-top:3px;}
+.tog{width:30px;height:16px;background:var(--border);border-radius:8px;cursor:pointer;position:relative;transition:background .2s;flex-shrink:0;}
+.tog.on{background:var(--accent);}
+.tog::after{content:'';position:absolute;width:10px;height:10px;background:#fff;border-radius:50%;top:3px;left:3px;transition:left .2s;}
+.tog.on::after{left:17px;}
+.btns{display:flex;gap:6px;}
+.btn{flex:1;padding:7px 8px;border:1px solid var(--border);background:var(--bg);color:var(--text-dim);font-family:var(--mono);font-size:10px;letter-spacing:.05em;cursor:pointer;border-radius:3px;text-transform:uppercase;transition:all .15s;}
+.btn:hover{border-color:var(--accent);color:var(--accent);box-shadow:0 0 6px var(--accent-dim);}
+.btn.on{background:var(--accent-dim);border-color:var(--accent);color:var(--accent);}
+.btn.w{border-color:#ffaa0040;color:var(--warn);}
+.btn.w:hover{border-color:var(--warn);}
+.logbox{font-family:var(--mono);font-size:9px;line-height:1.8;max-height:110px;overflow-y:auto;}
+.ll{display:flex;gap:6px;}
+.ll .ts{color:var(--text-dim);flex-shrink:0;}
+.ll .msg{color:var(--text);}
+.ll.ok .msg{color:var(--accent);}
+.ll.info .msg{color:var(--accent2);}
+.ll.warn .msg{color:var(--warn);}
+.ll.err .msg{color:var(--danger);}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <svg viewBox="0 0 26 26" fill="none">
+      <circle cx="13" cy="13" r="3" fill="#00ff88"/>
+      <path d="M13 13 Q18 8 20 3" stroke="#00ff88" stroke-width="1.4" stroke-linecap="round" opacity=".8"/>
+      <path d="M13 13 Q18 18 20 23" stroke="#00ff88" stroke-width="1.4" stroke-linecap="round" opacity=".8"/>
+      <path d="M9 9 Q5 13 9 18" stroke="#00aaff" stroke-width="1.1" stroke-linecap="round" opacity=".6"/>
+      <path d="M6 6 Q1 13 6 20" stroke="#00aaff" stroke-width=".9" stroke-linecap="round" opacity=".3"/>
+    </svg>
+    <div>
+      <div class="logo-text">BLE POSTRACK</div>
+      <div class="logo-sub">6.6m x 15.1m · 3 Beacons · Option A Triangle</div>
+    </div>
+  </div>
+  <div class="hpills">
+    <div class="pill" id="fbPill"><div class="dot"></div><span id="fbLabel">FIREBASE OFF</span></div>
+    <div class="pill live"><div class="dot"></div><span id="modeLabel">SIMULATION</span></div>
+    <div class="pill"><span id="clockEl">--:--:--</span></div>
+    <div class="pill"><span id="fpsEl">-- Hz</span></div>
+  </div>
+</header>
+<div class="main">
+  <div class="floor-wrap">
+    <div class="canvas-wrap">
+      <canvas id="floor"></canvas>
+      <div class="hint">DRAG BEACON TO REPOSITION · DRAG PHONE DOT · RIGHT-CLICK BEACON = REMOVE</div>
+    </div>
+  </div>
+  <div class="sidebar">
+    <div class="sec">
+      <div class="sec-title">// Live Position</div>
+      <div class="pos-grid">
+        <div class="pos-card"><div class="ax">X - WIDTH</div><div class="val" id="posX">0.00<span>m</span></div></div>
+        <div class="pos-card"><div class="ax">Y - LENGTH</div><div class="val" id="posY">0.00<span>m</span></div></div>
+      </div>
+      <div class="irow"><span>ACCURACY</span><span class="ival">+/- 1.5 m</span></div>
+      <div class="irow"><span>SOURCE</span><span class="ival" id="srcEl">SIMULATION</span></div>
+      <div class="irow"><span>UPDATED</span><span class="ival" id="updEl">--</span></div>
+    </div>
+    <div class="sec">
+      <div class="sec-title">// Beacons (3 - Triangle Layout)</div>
+      <div id="beaconList"></div>
+    </div>
+    <div class="sec">
+      <div class="sec-title">// Firebase Realtime DB</div>
+      <div class="fb-form">
+        <div><div class="fbi-label">Database URL</div><input class="fbi" id="fbUrl" placeholder="https://your-project.firebaseio.com"/></div>
+        <div><div class="fbi-label">Data path</div><input class="fbi" id="fbPath" value="/position"/></div>
+        <div class="btns" style="margin-top:2px;">
+          <button class="btn on" id="btnFb" onclick="toggleFirebase()">Connect</button>
+          <button class="btn w" onclick="clearPath()">Clear</button>
+        </div>
+        <div style="font-size:9px;color:var(--text-dim);line-height:1.6;margin-top:6px;">Android writes: <span style="color:var(--accent2)">{ x, y, beacons:[{rssi},{rssi},{rssi}] }</span></div>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-title">// BLE Physics</div>
+      <div class="srow"><span>Path loss (n)</span><input type="range" id="slN" min="1.5" max="4" step="0.1" value="2.5"><span class="sval" id="vN">2.5</span></div>
+      <div class="srow"><span>Tx power (dBm)</span><input type="range" id="slTx" min="-80" max="-50" step="1" value="-65"><span class="sval" id="vTx">-65</span></div>
+      <div class="srow"><span>Smooth alpha</span><input type="range" id="slA" min="0.05" max="0.95" step="0.05" value="0.3"><span class="sval" id="vA">0.30</span></div>
+      <div class="trow"><span>Show trail</span><div class="tog on" id="trailTog"></div></div>
+    </div>
+    <div class="sec">
+      <div class="sec-title">// Controls</div>
+      <div class="btns">
+        <button class="btn on" id="btnSim" onclick="toggleSim()">Sim</button>
+        <button class="btn" onclick="resetPos()">Reset</button>
+      </div>
+    </div>
+    <div class="sec" style="flex:1">
+      <div class="sec-title">// Event Log</div>
+      <div class="logbox" id="logbox"></div>
+    </div>
+  </div>
+</div>
+<script>
+const RW=6.6,RH=15.1;
+const canvas=document.getElementById('floor'),ctx=canvas.getContext('2d');
+let CW,CH,PX,PY;
+function sizeCanvas(){const w=canvas.closest('.floor-wrap');const avW=w.clientWidth-48,avH=w.clientHeight-48;const sc=Math.min(avW/RW,avH/RH,46);CW=Math.round(RW*sc);CH=Math.round(RH*sc);PX=CW/RW;PY=CH/RH;canvas.width=CW;canvas.height=CH;}
+const m2p=(mx,my)=>({x:mx*PX,y:my*PY});
+const p2m=(px,py)=>({x:px/PX,y:py/PY});
+const BCOL=['#ff4466','#ffaa00','#00aaff'];
+const BNAME=['M2-A','M2-B','M2-C'];
+const BUUID=['FDA50693-A4E2','FDA50693-A4E3','FDA50693-A4E4'];
+let beacons=[
+  {x:0.3,      y:0.3,       rssi:-70,dist:2,sm:-70,on:true},
+  {x:RW-0.3,   y:0.3,       rssi:-70,dist:2,sm:-70,on:true},
+  {x:RW/2,     y:RH-0.3,    rssi:-70,dist:2,sm:-70,on:true}
+];
+let phone={x:RW/2,y:RH/2},tgt={x:RW/2,y:RH/2},est={x:RW/2,y:RH/2};
+let trail=[],showT=true,simOn=true;
+let n=2.5,txp=-65,alpha=0.3;
+let dragB=-1,dragP=false;
+let fbApp=null,fbRef=null,fbLive=false;
+let fc=0,lastFt=Date.now(),fps=0;
+
+function draw(){
+  ctx.clearRect(0,0,CW,CH);
+  ctx.fillStyle='#090c12';ctx.fillRect(0,0,CW,CH);
+  ctx.strokeStyle='#18202e';ctx.lineWidth=1;
+  for(let x=0;x<=RW;x++){ctx.beginPath();ctx.moveTo(x*PX,0);ctx.lineTo(x*PX,CH);ctx.stroke();}
+  for(let y=0;y<=RH;y++){ctx.beginPath();ctx.moveTo(0,y*PY);ctx.lineTo(CW,y*PY);ctx.stroke();}
+  const fs=Math.max(8,PX*.22);
+  ctx.fillStyle='#1e2d3d';ctx.font=fs+'px Share Tech Mono';ctx.textAlign='left';
+  for(let x=1;x<RW;x++)ctx.fillText(x+'m',x*PX+2,CH-3);
+  for(let y=1;y<RH;y++)ctx.fillText(y+'m',2,y*PY-3);
+  ctx.strokeStyle='#28384e';ctx.lineWidth=2;ctx.strokeRect(1,1,CW-2,CH-2);
+  ctx.fillStyle='#304050';ctx.font='bold '+Math.max(9,PX*.26)+'px Share Tech Mono';ctx.textAlign='center';
+  ctx.fillText('6.6 m',CW/2,CH-4);
+  ctx.save();ctx.translate(8,CH/2);ctx.rotate(-Math.PI/2);ctx.fillText('15.1 m',0,0);ctx.restore();
+  if(beacons.length===3){
+    ctx.beginPath();
+    const p0=m2p(beacons[0].x,beacons[0].y),p1=m2p(beacons[1].x,beacons[1].y),p2=m2p(beacons[2].x,beacons[2].y);
+    ctx.moveTo(p0.x,p0.y);ctx.lineTo(p1.x,p1.y);ctx.lineTo(p2.x,p2.y);ctx.lineTo(p0.x,p0.y);
+    ctx.strokeStyle='#ffffff08';ctx.lineWidth=1;ctx.setLineDash([4,5]);ctx.stroke();ctx.setLineDash([]);
+  }
+  beacons.forEach((b,i)=>{
+    if(!b.on)return;
+    const p=m2p(b.x,b.y),r=b.dist*PX;
+    if(r>2&&r<1500){ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.strokeStyle=BCOL[i]+'1e';ctx.lineWidth=1.2;ctx.setLineDash([3,4]);ctx.stroke();ctx.setLineDash([]);}
+  });
+  if(showT&&trail.length>1){
+    ctx.beginPath();const t0=m2p(trail[0].x,trail[0].y);ctx.moveTo(t0.x,t0.y);
+    trail.forEach(t=>{const p=m2p(t.x,t.y);ctx.lineTo(p.x,p.y);});
+    ctx.strokeStyle='#00ff8842';ctx.lineWidth=1.5;ctx.stroke();
+    trail.forEach((t,i)=>{const p=m2p(t.x,t.y),a=(i/trail.length)*.5;ctx.beginPath();ctx.arc(p.x,p.y,2,0,Math.PI*2);ctx.fillStyle='rgba(0,255,136,'+a+')';ctx.fill();});
+  }
+  beacons.forEach((b,i)=>{
+    const p=m2p(b.x,b.y),col=BCOL[i],r=Math.max(8,PX*.3);
+    const g=ctx.createRadialGradient(p.x,p.y,1,p.x,p.y,r*2.8);
+    g.addColorStop(0,col+'40');g.addColorStop(1,col+'00');
+    ctx.beginPath();ctx.arc(p.x,p.y,r*2.8,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+    ctx.beginPath();ctx.arc(p.x,p.y,r,0,Math.PI*2);ctx.fillStyle=col;ctx.fill();
+    for(let ri=4;ri<=12;ri+=4){ctx.beginPath();ctx.arc(p.x,p.y-r-2,ri,Math.PI*1.15,Math.PI*1.85);ctx.strokeStyle=col+'88';ctx.lineWidth=1.1;ctx.stroke();}
+    ctx.fillStyle=col;ctx.font='bold '+Math.max(8,PX*.22)+'px Share Tech Mono';ctx.textAlign='center';
+    ctx.fillText(BNAME[i],p.x,p.y+r+11);
+    ctx.fillStyle=col+'99';ctx.font=Math.max(7,PX*.18)+'px Share Tech Mono';
+    ctx.fillText('('+b.x.toFixed(1)+','+b.y.toFixed(1)+')',p.x,p.y+r+21);
+  });
+  const ep=m2p(est.x,est.y);
+  ctx.beginPath();ctx.arc(ep.x,ep.y,1.5*PX,0,Math.PI*2);ctx.strokeStyle='#00ff881a';ctx.lineWidth=1;ctx.setLineDash([3,4]);ctx.stroke();ctx.setLineDash([]);
+  const pp=m2p(phone.x,phone.y);
+  [18,12,7].forEach((r,i)=>{ctx.beginPath();ctx.arc(pp.x,pp.y,r,0,Math.PI*2);ctx.strokeStyle='rgba(0,255,136,'+ [.1,.28,0][i]+')';ctx.lineWidth=1.5;ctx.stroke();});
+  ctx.beginPath();ctx.arc(pp.x,pp.y,6,0,Math.PI*2);ctx.fillStyle='#00ff88';ctx.shadowColor='#00ff88';ctx.shadowBlur=14;ctx.fill();ctx.shadowBlur=0;
+  ctx.fillStyle='#00ff88';ctx.font=Math.max(8,PX*.22)+'px Share Tech Mono';ctx.textAlign='center';
+  ctx.fillText('PHONE',pp.x,pp.y-21);
+  ctx.fillText('('+phone.x.toFixed(1)+', '+phone.y.toFixed(1)+')m',pp.x,pp.y-12);
+}
+
+const rssiFromD=d=>txp-10*n*Math.log10(Math.max(.1,d))+(Math.random()-.5)*6;
+const dFromRssi=rs=>Math.pow(10,(txp-rs)/(10*n));
+
+function trilat3(b0,b1,b2,d0,d1,d2){
+  const A=[[2*(b1.x-b0.x),2*(b1.y-b0.y)],[2*(b2.x-b0.x),2*(b2.y-b0.y)]];
+  const B=[d0*d0-d1*d1-b0.x*b0.x+b1.x*b1.x-b0.y*b0.y+b1.y*b1.y,d0*d0-d2*d2-b0.x*b0.x+b2.x*b2.x-b0.y*b0.y+b2.y*b2.y];
+  const det=A[0][0]*A[1][1]-A[0][1]*A[1][0];
+  if(Math.abs(det)<.001)return null;
+  return{x:(B[0]*A[1][1]-B[1]*A[0][1])/det,y:(A[0][0]*B[1]-A[1][0]*B[0])/det};
+}
+
+function tick(){
+  if(!simOn)return;
+  phone.x+=(tgt.x-phone.x)*.04;phone.y+=(tgt.y-phone.y)*.04;
+  if(Math.random()<.005){tgt.x=.5+Math.random()*(RW-1);tgt.y=.5+Math.random()*(RH-1);}
+  beacons.forEach(b=>{const d=Math.hypot(phone.x-b.x,phone.y-b.y);const r=rssiFromD(d);b.sm=alpha*r+(1-alpha)*b.sm;b.rssi=b.sm;b.dist=dFromRssi(b.sm);});
+  const pos=trilat3(beacons[0],beacons[1],beacons[2],beacons[0].dist,beacons[1].dist,beacons[2].dist);
+  if(pos){pos.x=Math.max(0,Math.min(RW,pos.x));pos.y=Math.max(0,Math.min(RH,pos.y));est.x+=.25*(pos.x-est.x);est.y+=.25*(pos.y-est.y);}
+  const last=trail[trail.length-1];
+  if(!last||Math.hypot(phone.x-last.x,phone.y-last.y)>.2){trail.push({x:phone.x,y:phone.y});if(trail.length>100)trail.shift();}
+  updateSidebar();draw();
+  fc++;const now=Date.now();if(now-lastFt>1000){fps=fc;fc=0;lastFt=now;document.getElementById('fpsEl').textContent=fps+' Hz';}
+}
+
+function updateSidebar(){
+  document.getElementById('posX').innerHTML=phone.x.toFixed(2)+'<span>m</span>';
+  document.getElementById('posY').innerHTML=phone.y.toFixed(2)+'<span>m</span>';
+  document.getElementById('updEl').textContent=new Date().toLocaleTimeString();
+  const list=document.getElementById('beaconList');list.innerHTML='';
+  beacons.forEach((b,i)=>{
+    const pct=Math.min(100,Math.max(0,((b.rssi+100)/50)*100));
+    list.innerHTML+='<div class="bc '+(b.on?'on':'')+'"><div class="bct"><div class="bdot" style="background:'+BCOL[i]+';box-shadow:0 0 5px '+BCOL[i]+'50"></div><div class="bname">'+BNAME[i]+'<br><span style="font-size:9px;color:var(--text-dim)">'+BUUID[i]+'</span></div><div><div class="brssi" style="color:'+BCOL[i]+'">'+b.rssi.toFixed(0)+'<span style="font-size:9px;color:var(--text-dim)"> dBm</span></div><div class="bdist">'+b.dist.toFixed(2)+' m</div></div></div><div class="bbar-bg"><div class="bbar" style="width:'+pct+'%;background:'+BCOL[i]+'70"></div></div></div>';
+  });
+}
+
+function toggleSim(){simOn=!simOn;const b=document.getElementById('btnSim');b.classList.toggle('on',simOn);b.textContent=simOn?'Sim':'Pause';log(simOn?'Simulation resumed':'Simulation paused',simOn?'ok':'warn');}
+function resetPos(){trail=[];phone={x:RW/2,y:RH/2};tgt={x:RW/2,y:RH/2};est={x:RW/2,y:RH/2};beacons.forEach(b=>b.sm=-70);log('Position reset to centre','info');draw();}
+
+function toggleFirebase(){fbLive?disconnectFb():connectFb();}
+function connectFb(){
+  const url=document.getElementById('fbUrl').value.trim();
+  const path=document.getElementById('fbPath').value.trim()||'/position';
+  if(!url){log('Enter Firebase Database URL first','warn');return;}
+  try{
+    if(!fbApp)fbApp=firebase.initializeApp({databaseURL:url});
+    const db=firebase.database(fbApp);fbRef=db.ref(path);
+    fbRef.on('value',snap=>{
+      const d=snap.val();if(!d)return;
+      if(d.x!==undefined&&d.y!==undefined){
+        phone.x=Math.max(0,Math.min(RW,parseFloat(d.x)));phone.y=Math.max(0,Math.min(RH,parseFloat(d.y)));
+        document.getElementById('srcEl').textContent='FIREBASE';document.getElementById('updEl').textContent=new Date().toLocaleTimeString();
+        if(d.beacons&&Array.isArray(d.beacons)){d.beacons.forEach((bd,i)=>{if(beacons[i]&&bd.rssi!==undefined){beacons[i].rssi=parseFloat(bd.rssi);beacons[i].sm=parseFloat(bd.rssi);beacons[i].dist=dFromRssi(parseFloat(bd.rssi));}});}
+        const last=trail[trail.length-1];if(!last||Math.hypot(phone.x-last.x,phone.y-last.y)>.1){trail.push({x:phone.x,y:phone.y});if(trail.length>100)trail.shift();}
+        updateSidebar();draw();
+      }
+    });
+    fbLive=true;
+    document.getElementById('fbPill').classList.add('fb-on');document.getElementById('fbLabel').textContent='FIREBASE LIVE';
+    document.getElementById('modeLabel').textContent='LIVE';document.getElementById('srcEl').textContent='FIREBASE';
+    document.getElementById('btnFb').textContent='Disconnect';document.getElementById('btnFb').classList.remove('on');
+    log('Firebase connected to '+path,'ok');
+  }catch(e){log('Firebase: '+e.message,'err');}
+}
+function disconnectFb(){
+  if(fbRef){fbRef.off();fbRef=null;}fbLive=false;
+  document.getElementById('fbPill').classList.remove('fb-on');document.getElementById('fbLabel').textContent='FIREBASE OFF';
+  document.getElementById('modeLabel').textContent='SIMULATION';document.getElementById('srcEl').textContent='SIMULATION';
+  document.getElementById('btnFb').textContent='Connect';document.getElementById('btnFb').classList.add('on');
+  log('Firebase disconnected','warn');
+}
+function clearPath(){if(!fbRef){log('Not connected','warn');return;}fbRef.set(null).then(()=>log('Path cleared','ok')).catch(e=>log(e.message,'err'));}
+
+function evToM(e){const r=canvas.getBoundingClientRect();return p2m((e.clientX-r.left)*(CW/r.width),(e.clientY-r.top)*(CH/r.height));}
+canvas.addEventListener('mousedown',e=>{
+  const m=evToM(e),cp={x:m.x*PX,y:m.y*PY};
+  const pp=m2p(phone.x,phone.y);if(Math.hypot(cp.x-pp.x,cp.y-pp.y)<16){dragP=true;return;}
+  for(let i=0;i<beacons.length;i++){const bp=m2p(beacons[i].x,beacons[i].y);if(Math.hypot(cp.x-bp.x,cp.y-bp.y)<16){dragB=i;return;}}
+});
+canvas.addEventListener('mousemove',e=>{
+  const m=evToM(e);
+  if(dragB>=0){beacons[dragB].x=Math.max(.1,Math.min(RW-.1,m.x));beacons[dragB].y=Math.max(.1,Math.min(RH-.1,m.y));}
+  else if(dragP){phone.x=Math.max(0,Math.min(RW,m.x));phone.y=Math.max(0,Math.min(RH,m.y));tgt.x=phone.x;tgt.y=phone.y;}
+});
+canvas.addEventListener('mouseup',()=>{if(dragB>=0){const b=beacons[dragB];log(BNAME[dragB]+' moved to ('+b.x.toFixed(1)+', '+b.y.toFixed(1)+')m','info');}dragB=-1;dragP=false;});
+canvas.addEventListener('contextmenu',e=>{e.preventDefault();const m=evToM(e),cp={x:m.x*PX,y:m.y*PY};for(let i=0;i<beacons.length;i++){const bp=m2p(beacons[i].x,beacons[i].y);if(Math.hypot(cp.x-bp.x,cp.y-bp.y)<16){log('Removed '+BNAME[i],'warn');beacons.splice(i,1);updateSidebar();return;}}});
+
+document.getElementById('slN').addEventListener('input',function(){n=parseFloat(this.value);document.getElementById('vN').textContent=n.toFixed(1);});
+document.getElementById('slTx').addEventListener('input',function(){txp=parseInt(this.value);document.getElementById('vTx').textContent=txp;});
+document.getElementById('slA').addEventListener('input',function(){alpha=parseFloat(this.value);document.getElementById('vA').textContent=alpha.toFixed(2);});
+document.getElementById('trailTog').addEventListener('click',function(){showT=!showT;this.classList.toggle('on',showT);});
+setInterval(()=>{document.getElementById('clockEl').textContent=new Date().toLocaleTimeString();},1000);
+
+function log(msg,type){const el=document.getElementById('logbox');const d=document.createElement('div');d.className='ll '+(type||'');d.innerHTML='<span class="ts">['+new Date().toLocaleTimeString()+']</span><span class="msg">'+msg+'</span>';el.insertBefore(d,el.firstChild);if(el.children.length>40)el.removeChild(el.lastChild);}
+
+window.addEventListener('resize',()=>{sizeCanvas();draw();});
+sizeCanvas();updateSidebar();draw();
+log('BLE PosTrack ready - 6.6m x 15.1m','ok');
+log('3 beacons - Option A triangle layout','info');
+log('M2-A (0.3,0.3) · M2-B (6.3,0.3) · M2-C (3.3,14.8)','info');
+log('Simulation running at 20 Hz','info');
+setInterval(tick,50);
+</script>
+</body>
+</html>
