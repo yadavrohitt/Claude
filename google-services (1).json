@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "109494587217",
+    "firebase_url": "https://ble---postrack-default-rtdb.firebaseio.com",
+    "project_id": "ble---postrack",
+    "storage_bucket": "ble---postrack.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:109494587217:android:e9137f34859a6ca4690d70",
+        "android_client_info": {
+          "package_name": "com.blepostrack.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC3GJ8Dm0L49gCBPrRuP7u1CQXhbFwZkiI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
